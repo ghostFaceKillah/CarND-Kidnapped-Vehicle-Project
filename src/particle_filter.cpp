@@ -51,7 +51,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
         p.weight = 1;
 
         particles.push_back(p);
-        weights.push_back(p.weights);
+        weights.push_back(p.weight);
     }
 
     is_initialized = true;
@@ -62,6 +62,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
     // NOTE: When adding noise you may find std::normal_distribution and std::default_random_engine useful.
     //  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
     //  http://www.cplusplus.com/reference/random/default_random_engine/
+    std::default_random_engine gen; // TODO(mike): Maybe extract gen to objec??
 
     std::normal_distribution<double> noise_x_dist(0, std_pos[0]);
     std::normal_distribution<double> noise_y_dist(0, std_pos[1]);
@@ -118,7 +119,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         Particle p = particles[i];
 
         // remap observations from vehicle coordinate system to map coordinate system
-        for (int obs_idx = 0; obs_idx < obs_size; ++obs_size) {
+        for (int obs_idx = 0; obs_idx < observations.size(); ++obs_idx) {
             LandmarkObs obs = observations[i];
             double x_map = cos(p.theta) * obs.x - sin(p.theta) * obs.y + p.x;
             double y_map = sin(p.theta) * obs.x + cos(p.theta) * obs.y + p.y;
@@ -127,7 +128,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         }
 
         // choose relevant observations
-        std::vector<LandmarkObs> relvant_landmarks;
+        std::vector<LandmarkObs> relevant_landmarks;
         for (auto landmark : map_landmarks.landmark_list) {
             double dist_ = dist(p.x, p.y, landmark.x_f, landmark.y_f);
             if (dist_ < sensor_range) {
@@ -171,8 +172,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
             // TODO(Mike) denominator looks suspicious...
             double probability = exp(exp_arg) / sqrt(2 * M_PI * std_landmark[0] * std_landmark[1]);
-
-            p.weight *= prob;
+            p.weight *= probability;
         }
     }
 
