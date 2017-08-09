@@ -111,13 +111,89 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     //   and the following is a good resource for the actual equation to implement (look at equation 
     //   3.33
     //   http://planning.cs.uiuc.edu/node99.html
+
+    double sum = 0.0;
+
+    for (int i = 0; i < num_particles; ++i) {
+        Particle p = particles[i];
+
+        // remap observations from vehicle coordinate system to map coordinate system
+        for (int obs_idx = 0; obs_idx < obs_size; ++obs_size) {
+            LandmarkObs obs = observations[i];
+            double x_map = cos(p.theta) * obs.x - sin(p.theta) * obs.y + p.x;
+            double y_map = sin(p.theta) * obs.x + cos(p.theta) * obs.y + p.y;
+            observations[i].x = x_map;
+            observations[i].y = y_map;
+        }
+
+        // choose relevant observations
+        std::vector<LandmarkObs> relvant_landmarks;
+        for (auto landmark : map_landmarks.landmark_list) {
+            double dist_ = dist(p.x, p.y, landmark.x_f, landmark.y_f);
+            if (dist_ < sensor_range) {
+                LandmarkObs obs = { landmark.x_f, landmark.y_f, landmark.id_i };
+                relevant_landmarks.push_back(obs);
+            }
+        }
+
+        for (auto obs : observations) { 
+
+            // Identify the closest landmark
+            double min_dist = sensor_range;
+            LandmarkObs closest_landmark;
+            bool closest_landmark_exists = false;
+            for (auto landmark : relevant_landmarks) {
+                double dist_ = dist(obs.x, obs.y, landmark.x, landmark.y);
+
+                if (dist_ < min_dist) {
+                    closest_landmark = landmark;
+                    min_dist = dist_;
+                    closest_landmark_exists = true;
+                }
+            }
+
+
+            // Update the particle weight
+
+            double x_diff, y_diff;
+
+            if (closest_landmark_exists) {
+                x_diff = closest_landmark.x - obs.x;
+                y_diff = closest_landmark.y - obs.y;
+            } else { 
+                x_diff = y_diff = sensor_range;
+            }
+
+            double exp_arg = -(
+                (x_diff * x_diff) / (2 * std_landmark[0] * std_landmark[0]) + 
+                (y_diff * y_diff) / (2 * std_landmark[1] * std_landmark[1]) 
+            );
+
+            // TODO(Mike) denominator looks suspicious...
+            double probability = exp(exp_arg) / sqrt(2 * M_PI * std_landmark[0] * std_landmark[1]);
+
+            p.weight *= prob;
+        }
+    }
+
+
 }
 
 void ParticleFilter::resample() {
     // TODO: Resample particles with replacement with probability proportional to their weight. 
     // NOTE: You may find std::discrete_distribution helpful here.
     //   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+    std::vector<Particle> new_particles;
+    new_particles.reserve(num_particles);
 
+    std::default_random_engine gen;
+    std::discrete_distribution<int> particle_distribution(weights.begin(), weights.end());
+
+    for (int i = 0; i < num_particles; ++i) {
+        new_particles[i] = particles[particle_distribution(gen)];
+    }
+
+    particles = new_particles;
 }
 
 Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> associations, std::vector<double> sense_x, std::vector<double> sense_y)
@@ -127,12 +203,12 @@ Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> ass
     // sense_x: the associations x mapping already converted to world coordinates
     // sense_y: the associations y mapping already converted to world coordinates
 
-    //Clear the previous associations
+    // Clear the previous associations
     particle.associations.clear();
     particle.sense_x.clear();
     particle.sense_y.clear();
 
-    particle.associations= associations;
+    particle.associations = associations;
     particle.sense_x = sense_x;
     particle.sense_y = sense_y;
 
